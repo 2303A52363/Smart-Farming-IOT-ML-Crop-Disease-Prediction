@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Smart Farming · IoT + ML · React + MongoDB</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{
+  --bg:#030d08;--surface:#071410;--card:#0b1d16;--card2:#0f2419;
+  --border:#143d28;--border2:#1f5538;
+  --green:#00e87a;--green2:#00b85e;--green3:#007d40;
+  --teal:#00d4aa;--sky:#00b4d8;--gold:#f4c842;--orange:#ff7c38;
+  --red:#ff4455;--purple:#a78bfa;
+  --text:#d4edd8;--muted:#6b9a7a;--dim:#3a6a4a;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body,#root{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-thumb{background:var(--border2);}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.8);}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:none;}}
+@keyframes ticker{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(30px);}to{opacity:1;transform:none;}}
+@keyframes shimmer{0%{background-position:-200% center;}100%{background-position:200% center;}}
+@keyframes floatLeaf{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(-12px) rotate(5deg);}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+/* ═══════════════════════════════════════════════════
+   SIMULATED MONGODB AUTH LAYER
+═══════════════════════════════════════════════════ */
+const AuthDB = (() => {
+  const users = [
+    { _id:'u1', username:'admin',   password:'farm2024', role:'Admin',    name:'Admin User',   avatar:'👨‍🌾' },
+    { _id:'u2', username:'farmer',  password:'grow123',  role:'Farmer',   name:'Ravi Kumar',   avatar:'🧑‍🌾' },
+    { _id:'u3', username:'analyst', password:'ml2024',   role:'Analyst',  name:'Priya Sharma', avatar:'👩‍💻' },
+  ];
+  const login = (username, password) => new Promise((res, rej) => {
+    setTimeout(() => {
+      const user = users.find(u => u.username===username && u.password===password);
+      if(user) res({ ...user, token: `tok_${Date.now()}`, loginAt: new Date().toLocaleTimeString() });
+      else rej(new Error('Invalid username or password'));
+    }, 700);
+  });
+  return { login };
+})();
+
+/* ═══════════════════════════════════════════════════
+   SIMULATED MONGODB LAYER
+═══════════════════════════════════════════════════ */
+const MongoDB = (() => {
+  const db = {
+    sensors: [
+      { _id:'s1', name:'Soil Moisture', icon:'💧', val:47,  unit:'%',   status:'warn', history:[40,55,48,62,47,44] },
+      { _id:'s2', name:'Temperature',   icon:'🌡️', val:31,  unit:'°C',  status:'on',   history:[28,29,30,31,31,32] },
+      { _id:'s3', name:'Humidity',       icon:'💨', val:68,  unit:'%',   status:'on',   history:[60,64,70,67,68,69] },
+      { _id:'s4', name:'Light (PAR)',    icon:'☀️', val:814, unit:'µmol',status:'on',   history:[600,700,780,814,814,820] },
+      { _id:'s5', name:'Rainfall',       icon:'🌧️', val:2.1, unit:'mm',  status:'on',   history:[0,0,1.2,2.1,2.1,2.3] },
+      { _id:'s6', name:'Soil pH',        icon:'⚗️', val:6.4, unit:'pH',  status:'on',   history:[6.1,6.2,6.3,6.4,6.4,6.5] },
+    ],
+    diseases: [
+      { _id:'d1', crop:'Wheat',   name:'Leaf Rust',          risk:88, level:'high' },
+      { _id:'d2', crop:'Rice',    name:'Blast Disease',       risk:82, level:'high' },
+      { _id:'d3', crop:'Maize',   name:'Northern Blight',     risk:65, level:'med'  },
+      { _id:'d4', crop:'Cotton',  name:'Bacterial Blight',    risk:71, level:'med'  },
+      { _id:'d5', crop:'Tomato',  name:'Early Blight',        risk:55, level:'med'  },
+      { _id:'d6', crop:'Potato',  name:'Late Blight',         risk:44, level:'low'  },
+      { _id:'d7', crop:'Soybean', name:'Sudden Death Syn.',   risk:38, level:'low'  },
+      { _id:'d8', crop:'Grape',   name:'Powdery Mildew',      risk:60, level:'med'  },
+    ],
+    models: [
+      { _id:'m1', name:'CNN / Deep CNN',    type:'Deep Learning',   task:'Disease Classification',  acc:99, prec:99.5, color:'#00e87a', badge:'SOTA'     },
+      { _id:'m2', name:'MKGPCNN',           type:'Kronecker Guided',task:'Crop Recommendation',     acc:99, prec:99.0, color:'#00d4aa', badge:'Crop Rec'  },
+      { _id:'m3', name:'CGSAAN',            type:'Graph Attention', task:'Disease + Fertilizer',    acc:98, prec:99.0, color:'#00b4d8', badge:'Disease'   },
+      { _id:'m4', name:'Random Forest',     type:'Ensemble',        task:'General Classification',  acc:94, prec:94.2, color:'#a78bfa', badge:'Classic'   },
+      { _id:'m5', name:'SVM',               type:'Kernel Method',   task:'Binary Disease Detect.',  acc:91, prec:91.8, color:'#f4c842', badge:'Fast'      },
+      { _id:'m6', name:'YOLOv5 (UAV)',      type:'Object Detection',task:'Field Aerial Survey',     acc:96, prec:96.0, color:'#ff7c38', badge:'UAV'       },
+      { _id:'m7', name:'Transfer Learning', type:'Fine-tuning',     task:'Cross-crop Adaptation',   acc:95, prec:95.3, color:'#ff4455', badge:'Low Data'  },
+    ],
+    alerts: [
+      { _id:'a1', time:'08:41', level:'crit', msg:'Zone 3 — Wheat Leaf Rust probability 88% · Initiate fungicide spray.', tag:'CRITICAL' },
+      { _id:'a2', time:'08:35', level:'warn', msg:'Soil moisture below threshold (47%) — irrigation cycle pending.', tag:'WARNING' },
+      { _id:'a3', time:'08:20', level:'warn', msg:'Rice Blast spore count elevated in Zone 2 sensor node.', tag:'WARNING' },
+      { _id:'a4', time:'08:05', level:'info', msg:'ML model retrained on 240 new leaf images · Acc improved +0.3%.', tag:'INFO' },
+      { _id:'a5', time:'07:50', level:'info', msg:'Daily diagnostics passed — all 6 IoT sensor nodes online.', tag:'INFO' },
+    ],
+    kpis: {
+      cnnAccuracy:'99', precision:'99.5', recall:'99.6',
+      sensorTypes:'6+', waterSaved:'60', laborReduction:'40', earlyDetection:'72'
+    }
+  };
+
+  const query = (col, filter={}) => new Promise(res => {
+    setTimeout(() => {
+      let docs = [...(db[col]||[])];
+      Object.entries(filter).forEach(([k,v])=>{ docs=docs.filter(d=>d[k]===v); });
+      res(docs);
+    }, 50);
+  });
+
+  const findOne = (col, filter={}) => query(col,filter).then(d=>d[0]||null);
+  const getKpis = () => new Promise(res => setTimeout(()=>res({...db.kpis}),40));
+
+  const insertAlert = (alert) => new Promise(res => {
+    setTimeout(()=>{
+      const doc = { _id:`a${Date.now()}`, time: new Date().toTimeString().slice(0,5), ...alert };
+      db.alerts.unshift(doc);
+      if(db.alerts.length>10) db.alerts.pop();
+      res(doc);
+    },40);
+  });
+
+  const updateSensor = (id, newVal) => new Promise(res => {
+    setTimeout(()=>{
+      const s = db.sensors.find(s=>s._id===id);
+      if(s){ s.history=[...s.history.slice(1),newVal]; s.val=newVal; }
+      res(s||null);
+    },30);
+  });
+
+  return { query, findOne, getKpis, insertAlert, updateSensor };
+})();
+
+/* ═══════════════════════════════════════════════════
+   LOGIN PAGE
+═══════════════════════════════════════════════════ */
+function LoginPage({ onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPwd,  setShowPwd]  = useState(false);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
+  const [focused,  setFocused]  = useState('');
+
+  const handleLogin = async () => {
+    if(!username.trim() || !password.trim()){ setError('Please enter username and password.'); return; }
+    setLoading(true); setError('');
+    try {
+      const user = await AuthDB.login(username.trim(), password.trim());
+      onLogin(user);
+    } catch(e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const hints = [
+    { u:'admin',   p:'farm2024', role:'Admin',   avatar:'👨‍🌾' },
+    { u:'farmer',  p:'grow123',  role:'Farmer',  avatar:'🧑‍🌾' },
+    { u:'analyst', p:'ml2024',   role:'Analyst', avatar:'👩‍💻' },
+  ];
+
+  return (
+    <div style={{
+      minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center',
+      background:'var(--bg)', position:'relative', overflow:'hidden', padding:20
+    }}>
+      {/* BG grid + glow */}
+      <div style={{position:'fixed',inset:0,pointerEvents:'none',
+        background:
+          'radial-gradient(ellipse 70% 60% at 20% 20%,rgba(0,232,122,.07) 0%,transparent 60%),' +
+          'radial-gradient(ellipse 50% 70% at 80% 80%,rgba(0,212,170,.05) 0%,transparent 55%),' +
+          'repeating-linear-gradient(0deg,transparent,transparent 59px,rgba(20,61,40,.06) 59px,rgba(20,61,40,.06) 60px),' +
+          'repeating-linear-gradient(90deg,transparent,transparent 59px,rgba(20,61,40,.04) 59px,rgba(20,61,40,.04) 60px)'
+      }}/>
+
+      {/* Floating leaves */}
+      {['🌿','🍃','🌱'].map((l,i)=>(
+        <div key={i} style={{
+          position:'fixed', fontSize:28+i*8, opacity:0.06,
+          top:`${20+i*25}%`, left:`${5+i*30}%`,
+          animation:`floatLeaf ${3+i}s ease-in-out infinite`,
+          animationDelay:`${i*0.8}s`, pointerEvents:'none'
+        }}>{l}</div>
+      ))}
+
+      <div style={{
+        width:'100%', maxWidth:420, animation:'fadeIn .6s ease both',
+        position:'relative', zIndex:1
+      }}>
+        {/* Logo / Brand */}
+        <div style={{textAlign:'center', marginBottom:32}}>
+          <div style={{
+            fontSize:52, marginBottom:12,
+            animation:'floatLeaf 3s ease-in-out infinite',
+            display:'inline-block'
+          }}>🌿</div>
+          <div style={{
+            fontWeight:900, fontSize:28, color:'#fff',
+            letterSpacing:-0.5, lineHeight:1.1
+          }}>
+            Smart Farming <span style={{color:'var(--green)'}}>IoT + ML</span>
+          </div>
+          <div style={{
+            fontFamily:"'JetBrains Mono',monospace", fontSize:9,
+            color:'var(--muted)', letterSpacing:3, textTransform:'uppercase', marginTop:6
+          }}>Crop Disease Prediction · Secure Portal</div>
+        </div>
+
+        {/* Card */}
+        <div style={{
+          background:'var(--card)', border:'1px solid var(--border)',
+          padding:'32px 28px', position:'relative'
+        }}>
+          {/* top accent line */}
+          <div style={{position:'absolute',top:0,left:0,right:0,height:2,
+            background:'linear-gradient(90deg,transparent,var(--green),var(--teal),transparent)'}}/>
+
+          <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:'var(--muted)',
+            letterSpacing:3,textTransform:'uppercase',marginBottom:22,display:'flex',alignItems:'center',gap:8}}>
+            <span style={{color:'var(--green)'}}>🔐</span> SIGN IN TO DASHBOARD
+            <div style={{flex:1,height:1,background:'linear-gradient(90deg,var(--border),transparent)'}}/>
+          </div>
+
+          {/* Username */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)',
+              letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Username</div>
+            <div style={{position:'relative'}}>
+              <div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',fontSize:14,pointerEvents:'none'}}>👤</div>
+              <input
+                type="text" value={username}
+                onChange={e=>{setUsername(e.target.value);setError('');}}
+                onFocus={()=>setFocused('u')} onBlur={()=>setFocused('')}
+                onKeyDown={e=>e.key==='Enter'&&handleLogin()}
+                placeholder="Enter username"
+                style={{
+                  width:'100%', padding:'11px 12px 11px 38px',
+                  background:'var(--surface)', border:`1px solid ${focused==='u'?'var(--green)':'var(--border)'}`,
+                  color:'var(--text)', fontFamily:"'Outfit',sans-serif", fontSize:13,
+                  outline:'none', transition:'border .2s',
+                  boxShadow: focused==='u'?'0 0 0 2px rgba(0,232,122,.08)':'none'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Password */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)',
+              letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>Password</div>
+            <div style={{position:'relative'}}>
+              <div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',fontSize:14,pointerEvents:'none'}}>🔑</div>
+              <input
+                type={showPwd?'text':'password'} value={password}
+                onChange={e=>{setPassword(e.target.value);setError('');}}
+                onFocus={()=>setFocused('p')} onBlur={()=>setFocused('')}
+                onKeyDown={e=>e.key==='Enter'&&handleLogin()}
+                placeholder="Enter password"
+                style={{
+                  width:'100%', padding:'11px 40px 11px 38px',
+                  background:'var(--surface)', border:`1px solid ${focused==='p'?'var(--green)':'var(--border)'}`,
+                  color:'var(--text)', fontFamily:"'Outfit',sans-serif", fontSize:13,
+                  outline:'none', transition:'border .2s',
+                  boxShadow: focused==='p'?'0 0 0 2px rgba(0,232,122,.08)':'none'
+                }}
+              />
+              <button onClick={()=>setShowPwd(v=>!v)} style={{
+                position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',
+                background:'none',border:'none',cursor:'pointer',fontSize:14,color:'var(--muted)',padding:4
+              }}>{showPwd?'🙈':'👁️'}</button>
+            </div>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              padding:'9px 12px', marginBottom:14,
+              background:'rgba(255,68,85,.07)', border:'1px solid rgba(255,68,85,.3)',
+              borderLeft:'3px solid var(--red)', color:'var(--red)',
+              fontFamily:"'JetBrains Mono',monospace", fontSize:10, letterSpacing:1
+            }}>⚠ {error}</div>
+          )}
+
+          {/* Login Button */}
+          <button
+            onClick={handleLogin}
+            disabled={loading}
+            style={{
+              width:'100%', padding:'13px',
+              background: loading ? 'rgba(0,232,122,.08)' : 'rgba(0,232,122,.12)',
+              border:`1px solid ${loading?'var(--green3)':'var(--green)'}`,
+              color: loading ? 'var(--muted)' : 'var(--green)',
+              fontFamily:"'JetBrains Mono',monospace", fontSize:11,
+              letterSpacing:3, textTransform:'uppercase', cursor: loading?'not-allowed':'pointer',
+              transition:'all .2s', display:'flex', alignItems:'center', justifyContent:'center', gap:10
+            }}
+            onMouseEnter={e=>{ if(!loading) e.currentTarget.style.background='rgba(0,232,122,.2)'; }}
+            onMouseLeave={e=>{ if(!loading) e.currentTarget.style.background='rgba(0,232,122,.12)'; }}
+          >
+            {loading ? (
+              <>
+                {[0,1,2].map(i=>(
+                  <div key={i} style={{width:6,height:6,borderRadius:'50%',background:'var(--green)',
+                    animation:'blink 1s ease-in-out infinite',animationDelay:`${i*.2}s`}}/>
+                ))}
+                <span>Authenticating...</span>
+              </>
+            ) : (
+              <> → SIGN IN TO DASHBOARD </>
+            )}
+          </button>
+
+          {/* MongoDB tag */}
+          <div style={{marginTop:16,display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+            fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--dim)',letterSpacing:2}}>
+            <div style={{width:5,height:5,borderRadius:'50%',background:'#6db33f',
+              animation:'blink 2s ease-in-out infinite',boxShadow:'0 0 6px #6db33f'}}/>
+            AUTH · MONGODB · USERS COLLECTION
+          </div>
+        </div>
+
+        {/* Demo credentials */}
+        <div style={{marginTop:16, background:'var(--surface)', border:'1px solid var(--border)', padding:16}}>
+          <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--dim)',
+            letterSpacing:2,textTransform:'uppercase',marginBottom:10}}>Demo Credentials — Click to fill</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {hints.map(h=>(
+              <button key={h.u} onClick={()=>{ setUsername(h.u); setPassword(h.p); setError(''); }}
+                style={{
+                  display:'flex',alignItems:'center',gap:10,padding:'8px 10px',
+                  background:'rgba(0,232,122,.03)',border:'1px solid var(--border)',
+                  cursor:'pointer',transition:'all .2s',textAlign:'left',width:'100%'
+                }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor='var(--green2)'}
+                onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}
+              >
+                <span style={{fontSize:18}}>{h.avatar}</span>
+                <div>
+                  <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--green)',letterSpacing:1}}>{h.u} / {h.p}</div>
+                  <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--dim)',letterSpacing:1}}>{h.role}</div>
+                </div>
+                <div style={{marginLeft:'auto',fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--dim)'}}>↗ USE</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   LOGOUT CONFIRM MODAL
+═══════════════════════════════════════════════════ */
+function LogoutModal({ user, onConfirm, onCancel }) {
+  return (
+    <div style={{
+      position:'fixed',inset:0,zIndex:9999,
+      background:'rgba(3,13,8,.85)',
+      display:'flex',alignItems:'center',justifyContent:'center',
+      backdropFilter:'blur(4px)', padding:20
+    }}>
+      <div style={{
+        background:'var(--card)', border:'1px solid var(--border)',
+        padding:'28px 28px', maxWidth:380, width:'100%',
+        animation:'fadeIn .3s ease both', position:'relative'
+      }}>
+        <div style={{position:'absolute',top:0,left:0,right:0,height:2,
+          background:'linear-gradient(90deg,transparent,var(--red),transparent)'}}/>
+
+        <div style={{textAlign:'center',marginBottom:20}}>
+          <div style={{fontSize:40,marginBottom:10}}>{user.avatar}</div>
+          <div style={{fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}}>{user.name}</div>
+          <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)',letterSpacing:2,textTransform:'uppercase'}}>
+            {user.role} · Logged in at {user.loginAt}
+          </div>
+        </div>
+
+        <div style={{
+          padding:'12px 14px', background:'rgba(255,68,85,.05)',
+          border:'1px solid rgba(255,68,85,.2)', borderLeft:'3px solid var(--red)',
+          marginBottom:20, fontFamily:"'JetBrains Mono',monospace",
+          fontSize:10, color:'var(--muted)', letterSpacing:1, lineHeight:1.6
+        }}>
+          ⚠ You are about to sign out of the Smart Farming dashboard. All live sensor updates will stop.
+        </div>
+
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={onCancel} style={{
+            flex:1, padding:'11px',
+            background:'rgba(0,232,122,.05)', border:'1px solid var(--border)',
+            color:'var(--muted)', fontFamily:"'JetBrains Mono',monospace",
+            fontSize:10, letterSpacing:2, cursor:'pointer', transition:'all .2s'
+          }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor='var(--border2)'}
+            onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}
+          >← CANCEL</button>
+          <button onClick={onConfirm} style={{
+            flex:1, padding:'11px',
+            background:'rgba(255,68,85,.08)', border:'1px solid rgba(255,68,85,.4)',
+            color:'var(--red)', fontFamily:"'JetBrains Mono',monospace",
+            fontSize:10, letterSpacing:2, cursor:'pointer', transition:'all .2s'
+          }}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(255,68,85,.15)'}
+            onMouseLeave={e=>e.currentTarget.style.background='rgba(255,68,85,.08)'}
+          >SIGN OUT →</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   HELPER COMPONENTS
+═══════════════════════════════════════════════════ */
+function Sparkline({ history, color='#007d40', activeColor='#00e87a' }) {
+  const max = Math.max(...history,1);
+  return (
+    <div style={{display:'flex',alignItems:'flex-end',gap:2,height:24}}>
+      {history.map((v,i)=>(
+        <div key={i} style={{
+          flex:1, borderRadius:'1px 1px 0 0',
+          height:`${Math.max(8,(v/max)*100)}%`,
+          background: i===history.length-1 ? activeColor : color,
+          opacity: i===history.length-1 ? 1 : 0.35+i*0.12,
+          transition:'height .8s ease'
+        }}/>
+      ))}
+    </div>
+  );
+}
+
+function RingChart({ pct, color='#00e87a', size=60, stroke=5, label='' }) {
+  const r = (size-stroke*2)/2;
+  const circ = 2*Math.PI*r;
+  return (
+    <div style={{position:'relative',width:size,height:size,flexShrink:0}}>
+      <svg width={size} height={size} style={{transform:'rotate(-90deg)'}}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(20,61,40,.5)" strokeWidth={stroke}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={circ} strokeDashoffset={circ*(1-pct/100)} strokeLinecap="round"
+          style={{transition:'stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1)'}}/>
+      </svg>
+      <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+        <div style={{fontFamily:"'Outfit',sans-serif",fontWeight:800,fontSize:size>50?14:11,color:'#fff',lineHeight:1}}>{pct}%</div>
+        {label && <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:7,color:'var(--muted)',letterSpacing:1,textAlign:'center',marginTop:2}}>{label}</div>}
+      </div>
+    </div>
+  );
+}
+
+function Badge({ text, color }) {
+  return (
+    <div style={{
+      padding:'2px 7px', fontFamily:"'JetBrains Mono',monospace", fontSize:8,
+      letterSpacing:1, textTransform:'uppercase', border:`1px solid ${color}40`,
+      background:`${color}18`, color, flexShrink:0
+    }}>{text}</div>
+  );
+}
+
+function DbTag({ label='MongoDB' }) {
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:6,padding:'3px 10px',
+      border:'1px solid rgba(0,232,122,.2)',background:'rgba(0,232,122,.04)',
+      fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--dim)',letterSpacing:2}}>
+      <div style={{width:5,height:5,borderRadius:'50%',background:'#6db33f',
+        animation:'blink 2s ease-in-out infinite',boxShadow:'0 0 6px #6db33f'}}/>
+      {label}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   MAIN APP
+═══════════════════════════════════════════════════ */
+function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showLogout,  setShowLogout]  = useState(false);
+
+  const [sensors,   setSensors]   = useState([]);
+  const [diseases,  setDiseases]  = useState([]);
+  const [models,    setModels]    = useState([]);
+  const [alerts,    setAlerts]    = useState([]);
+  const [kpis,      setKpis]      = useState({});
+  const [loading,   setLoading]   = useState(true);
+
+  const [activeDis,     setActiveDis]     = useState(0);
+  const [activeModel,   setActiveModel]   = useState(0);
+  const [modelTab,      setModelTab]      = useState(0);
+  const [activeSection, setActiveSection] = useState('overview');
+
+  const handleLogin = (user) => { setCurrentUser(user); };
+  const handleLogout = () => { setCurrentUser(null); setShowLogout(false); setLoading(true); setSensors([]); };
+
+  useEffect(()=>{
+    if(!currentUser) return;
+    setLoading(true);
+    Promise.all([
+      MongoDB.query('sensors'),
+      MongoDB.query('diseases'),
+      MongoDB.query('models'),
+      MongoDB.query('alerts'),
+      MongoDB.getKpis(),
+    ]).then(([s,d,m,a,k])=>{
+      setSensors(s); setDiseases(d); setModels(m); setAlerts(a); setKpis(k);
+      setLoading(false);
+    });
+  },[currentUser]);
+
+  useEffect(()=>{
+    if(loading || !currentUser) return;
+    const t = setInterval(async ()=>{
+      const fresh = await MongoDB.query('sensors');
+      const updated = await Promise.all(fresh.map(async s=>{
+        const delta = (Math.random()-.5)*(s._id==='s1'?3:s._id==='s2'?0.4:1.5);
+        const newVal = parseFloat((s.val+delta).toFixed(1));
+        return MongoDB.updateSensor(s._id, newVal);
+      }));
+      setSensors(updated.filter(Boolean));
+    }, 3500);
+    return ()=>clearInterval(t);
+  },[loading, currentUser]);
+
+  const triggerAlert = async (msg, level='warn') => {
+    await MongoDB.insertAlert({ level, msg, tag: level==='crit'?'CRITICAL':'WARNING' });
+    const fresh = await MongoDB.query('alerts');
+    setAlerts(fresh);
+  };
+
+  /* ── NOT LOGGED IN ── */
+  if(!currentUser) return <LoginPage onLogin={handleLogin}/>;
+
+  if(loading) return (
+    <div style={{height:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14}}>
+      <div style={{display:'flex',gap:6}}>
+        {[0,1,2].map(i=>(
+          <div key={i} style={{width:8,height:8,borderRadius:'50%',background:'var(--green)',
+            animation:`blink 1.2s ease-in-out infinite`,animationDelay:`${i*.2}s`}}/>
+        ))}
+      </div>
+      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:'var(--muted)',letterSpacing:3,textTransform:'uppercase'}}>
+        Connecting to MongoDB...
+      </div>
+    </div>
+  );
+
+  const navItems = ['overview','sensors','models','diseases','alerts'];
+  const dis = diseases[activeDis] || {};
+  const mod = models[activeModel] || {};
+
+  return (
+    <div style={{background:'var(--bg)',minHeight:'100vh',position:'relative'}}>
+
+      {/* Logout Modal */}
+      {showLogout && (
+        <LogoutModal user={currentUser} onConfirm={handleLogout} onCancel={()=>setShowLogout(false)}/>
+      )}
+
+      {/* BG */}
+      <div style={{position:'fixed',inset:0,pointerEvents:'none',zIndex:0,background:
+        'radial-gradient(ellipse 80% 60% at 10% -10%,rgba(0,232,122,.05) 0%,transparent 60%),' +
+        'radial-gradient(ellipse 60% 80% at 90% 110%,rgba(0,212,170,.04) 0%,transparent 50%),' +
+        'repeating-linear-gradient(0deg,transparent,transparent 59px,rgba(20,61,40,.06) 59px,rgba(20,61,40,.06) 60px),' +
+        'repeating-linear-gradient(90deg,transparent,transparent 59px,rgba(20,61,40,.04) 59px,rgba(20,61,40,.04) 60px)'
+      }}/>
+
+      <div style={{position:'relative',zIndex:1,maxWidth:1440,margin:'0 auto',padding:'0 24px 32px'}}>
+
+        {/* ── HEADER ── */}
+        <div style={{borderBottom:'1px solid var(--border)',paddingTop:20,paddingBottom:16,marginBottom:20,
+          display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <div style={{position:'relative'}}>
+              <div style={{fontSize:28}}>🌿</div>
+              <div style={{position:'absolute',bottom:0,right:-2,width:8,height:8,borderRadius:'50%',
+                background:'var(--green)',boxShadow:'0 0 10px var(--green)',animation:'pulse 2s ease-in-out infinite'}}/>
+            </div>
+            <div>
+              <div style={{fontFamily:"'Outfit',sans-serif",fontWeight:900,fontSize:'clamp(18px,2.5vw,30px)',
+                color:'#fff',letterSpacing:-0.5,lineHeight:1.1}}>
+                Smart Farming <span style={{color:'var(--green)'}}>IoT + ML</span>
+              </div>
+              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)',letterSpacing:3,textTransform:'uppercase',marginTop:3}}>
+                Crop Disease Prediction &amp; Control Dashboard
+              </div>
+            </div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <DbTag label="MONGODB · CONNECTED"/>
+            <DbTag label="REACT 18"/>
+            <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',
+              border:'1px solid rgba(0,232,122,.3)',background:'rgba(0,232,122,.06)',
+              fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--green)',letterSpacing:2}}>
+              <div style={{width:7,height:7,borderRadius:'50%',background:'var(--green)',
+                boxShadow:'0 0 8px var(--green)',animation:'pulse 2s ease-in-out infinite'}}/>
+              LIVE · ALL NODES ONLINE
+            </div>
+
+            {/* ── USER CHIP + LOGOUT ── */}
+            <div style={{display:'flex',alignItems:'center',gap:0,border:'1px solid var(--border)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',
+                background:'rgba(0,232,122,.03)'}}>
+                <span style={{fontSize:16}}>{currentUser.avatar}</span>
+                <div>
+                  <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--green)',letterSpacing:1}}>{currentUser.name}</div>
+                  <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:7,color:'var(--dim)',letterSpacing:1}}>{currentUser.role}</div>
+                </div>
+              </div>
+              <button onClick={()=>setShowLogout(true)} style={{
+                padding:'5px 12px', background:'rgba(255,68,85,.06)',
+                border:'none', borderLeft:'1px solid var(--border)',
+                color:'var(--red)', fontFamily:"'JetBrains Mono',monospace",
+                fontSize:8, letterSpacing:2, cursor:'pointer', transition:'all .2s',
+                height:'100%'
+              }}
+                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,68,85,.14)'}
+                onMouseLeave={e=>e.currentTarget.style.background='rgba(255,68,85,.06)'}
+              >⏻ LOGOUT</button>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ── NAV TABS ── */}
+        <div style={{display:'flex',gap:2,marginBottom:20,borderBottom:'1px solid var(--border)',overflowX:'auto'}}>
+          {navItems.map(n=>(
+            <button key={n} onClick={()=>setActiveSection(n)} style={{
+              padding:'9px 20px', fontFamily:"'JetBrains Mono',monospace", fontSize:9,
+              letterSpacing:3, textTransform:'uppercase',
+              background:'transparent', border:'none', cursor:'pointer',
+              borderBottom: activeSection===n ? '2px solid var(--green)' : '2px solid transparent',
+              color: activeSection===n ? 'var(--green)' : 'var(--muted)',
+              marginBottom:-1, transition:'all .2s', whiteSpace:'nowrap'
+            }}>{n}</button>
+          ))}
+        </div>
+
+        {/* ── KPI STRIP ── */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,
+          background:'var(--border)',border:'1px solid var(--border)',marginBottom:20}}>
+          {[
+            {lbl:'CNN Accuracy', val:kpis.cnnAccuracy, unit:'%', delta:'▲ vs 94% RF', c:'#00e87a'},
+            {lbl:'Precision',    val:kpis.precision,   unit:'%', delta:'MKGPCNN',      c:'#00d4aa'},
+            {lbl:'Recall',       val:kpis.recall,      unit:'%', delta:'CGSAAN',       c:'#00b4d8'},
+            {lbl:'IoT Sensors',  val:kpis.sensorTypes, unit:' types', delta:'Per node',c:'#a78bfa'},
+            {lbl:'Water Saved',  val:kpis.waterSaved,  unit:'%', delta:'AI irrigation',c:'#f4c842'},
+            {lbl:'Labor Cut',    val:`↓${kpis.laborReduction}`,unit:'%',delta:'Automation',c:'#00e87a'},
+            {lbl:'Early Detect', val:kpis.earlyDetection,unit:'h',delta:'Before outbreak',c:'#ff7c38'},
+          ].map((k,i)=>(
+            <div key={i} style={{background:'var(--card)',padding:'14px 12px',position:'relative',cursor:'default',transition:'background .2s'}}
+              onMouseEnter={e=>e.currentTarget.style.background='var(--card2)'}
+              onMouseLeave={e=>e.currentTarget.style.background='var(--card)'}>
+              <div style={{position:'absolute',bottom:0,left:0,right:0,height:2,background:k.c,opacity:.5}}/>
+              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--muted)',letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>{k.lbl}</div>
+              <div style={{fontWeight:800,fontSize:22,color:'#fff',lineHeight:1}}>
+                {k.val}<span style={{fontSize:11,color:'var(--muted)',fontWeight:400}}>{k.unit}</span>
+              </div>
+              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:k.c,marginTop:4}}>{k.delta}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ═══════════ OVERVIEW ═══════════ */}
+        {activeSection==='overview' && (
+          <div style={{display:'grid',gridTemplateColumns:'1.6fr 1fr',gap:16}}>
+            <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative',animation:'fadeUp .5s ease both'}}>
+              <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,var(--green3),transparent)'}}/>
+              <SectionTitle icon="⚙️" text="Smart Farming Pipeline"/>
+              <Pipeline/>
+              <div style={{marginTop:20}}>
+                <SectionTitle icon="🏗️" text="4-Layer System Architecture"/>
+                <Architecture/>
+              </div>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:16}}>
+              <AlertsPanel alerts={alerts} onTrigger={triggerAlert}/>
+              <MongoDBPanel/>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════ SENSORS ═══════════ */}
+        {activeSection==='sensors' && (
+          <div style={{animation:'fadeUp .4s ease both'}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:16}}>
+              {sensors.map(s=>(<SensorCard key={s._id} sensor={s}/>))}
+            </div>
+            <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative'}}>
+              <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,var(--green3),transparent)'}}/>
+              <SectionTitle icon="📊" text="MongoDB · sensors Collection Schema"/>
+              <pre style={{fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:'var(--muted)',
+                lineHeight:1.8,background:'var(--surface)',padding:16,border:'1px solid var(--border)',overflowX:'auto'}}>
+{`// db.sensors.find({})
+{
+  _id:     ObjectId("..."),
+  name:    "Soil Moisture",
+  icon:    "💧",
+  val:     ${sensors[0]?.val ?? 47},
+  unit:    "%",
+  status:  "warn",
+  history: [40, 55, 48, 62, 47, ${sensors[0]?.history?.slice(-1)[0] ?? 44}]
+}
+
+const SensorSchema = new mongoose.Schema({
+  name:    String,
+  val:     Number,
+  unit:    String,
+  status:  { type: String, enum: ['on','warn','off'], default:'on' },
+  history: [Number],
+}, { timestamps: true });`}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════ MODELS ═══════════ */}
+        {activeSection==='models' && (
+          <div style={{display:'grid',gridTemplateColumns:'1.6fr 1fr',gap:16,animation:'fadeUp .4s ease both'}}>
+            <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative'}}>
+              <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,var(--green3),transparent)'}}/>
+              <SectionTitle icon="🔬" text="ML Models · MongoDB Collection"/>
+              <div style={{display:'flex',gap:0,marginBottom:14,borderBottom:'1px solid var(--border)'}}>
+                {['Performance','Task','Type'].map((t,i)=>(
+                  <button key={i} onClick={()=>setModelTab(i)} style={{
+                    padding:'8px 14px',fontFamily:"'JetBrains Mono',monospace",fontSize:9,letterSpacing:2,
+                    textTransform:'uppercase',background:'transparent',border:'none',cursor:'pointer',
+                    borderBottom: modelTab===i ? '2px solid var(--green)' : '2px solid transparent',
+                    color: modelTab===i ? 'var(--green)' : 'var(--muted)',marginBottom:-1,transition:'all .2s'
+                  }}>{t}</button>
+                ))}
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {models.map((m,i)=>(
+                  <div key={m._id} onClick={()=>setActiveModel(i)}
+                    style={{display:'grid',gridTemplateColumns:'150px 1fr 60px 56px',gap:12,
+                      alignItems:'center',padding:'10px 12px',cursor:'pointer',
+                      border:`1px solid ${activeModel===i?'var(--green2)':'var(--border)'}`,
+                      background: activeModel===i ? 'rgba(0,232,122,.04)':'var(--surface)',transition:'all .2s'}}
+                    onMouseEnter={e=>{if(i!==activeModel){e.currentTarget.style.borderColor='var(--border2)';}}}
+                    onMouseLeave={e=>{if(i!==activeModel){e.currentTarget.style.borderColor='var(--border)';}}}
+                  >
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:'var(--text)'}}>{m.name}</div>
+                      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--muted)',letterSpacing:1,textTransform:'uppercase',marginTop:2}}>
+                        {modelTab===1 ? m.task : m.type}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{height:6,background:'rgba(20,61,40,.6)',marginBottom:4}}>
+                        <div style={{height:'100%',width:`${m.acc}%`,background:m.color,transition:'width 1s ease'}}/>
+                      </div>
+                      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--muted)'}}>
+                        Acc: {m.acc}% · Prec: {m.prec}%
+                      </div>
+                    </div>
+                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:13,fontWeight:700,color:m.color}}>{m.acc}%</div>
+                    <Badge text={m.badge} color={m.color}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:16}}>
+              <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative'}}>
+                <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,${mod.color||'var(--green)'},transparent)`}}/>
+                <SectionTitle icon="🧠" text="Selected Model"/>
+                <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:14}}>
+                  <RingChart pct={mod.acc||0} color={mod.color||'#00e87a'} size={70} stroke={6}/>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:16,color:'#fff',marginBottom:4}}>{mod.name}</div>
+                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)',letterSpacing:1,marginBottom:6}}>{mod.type}</div>
+                    <Badge text={mod.badge||''} color={mod.color||'var(--green)'}/>
+                  </div>
+                </div>
+                {[['Task',mod.task],['Accuracy',`${mod.acc}%`],['Precision',`${mod.prec}%`],['Recall','99.6%'],['F1 Score','99.5%']].map(([k,v])=>(
+                  <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid rgba(20,61,40,.5)'}}>
+                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)',letterSpacing:1}}>{k}</div>
+                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,fontWeight:700,color:'var(--text)'}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative',flex:1}}>
+                <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,var(--green3),transparent)'}}/>
+                <SectionTitle icon="🗄️" text="models Collection Schema"/>
+                <pre style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:'var(--muted)',lineHeight:1.8,background:'var(--surface)',padding:12,border:'1px solid var(--border)',overflowX:'auto'}}>
+{`// db.models.findOne({name:"${mod.name||'CNN'}"})
+{
+  _id:   ObjectId("..."),
+  name:  "${mod.name||'CNN'}",
+  type:  "${mod.type||'Deep Learning'}",
+  acc:   ${mod.acc||99},
+  prec:  ${mod.prec||99.5},
+  badge: "${mod.badge||'SOTA'}",
+  task:  "${mod.task||'Disease Classification'}"
+}`}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════ DISEASES ═══════════ */}
+        {activeSection==='diseases' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:16,animation:'fadeUp .4s ease both'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {diseases.map((d,i)=>(
+                <div key={d._id} onClick={()=>setActiveDis(i)} style={{
+                  padding:12, border:`1px solid ${activeDis===i?'var(--green2)':'var(--border)'}`,
+                  background: activeDis===i ? 'rgba(0,232,122,.04)' : 'var(--surface)',
+                  cursor:'pointer',transition:'all .2s',position:'relative'
+                }}>
+                  {activeDis===i && <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'var(--green)'}}/>}
+                  <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--muted)',letterSpacing:2,textTransform:'uppercase',marginBottom:4}}>{d.crop}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:'var(--text)',marginBottom:8}}>{d.name}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{flex:1,height:5,background:'rgba(20,61,40,.6)'}}>
+                      <div style={{height:'100%',width:`${d.risk}%`,
+                        background:d.level==='high'?'var(--red)':d.level==='med'?'var(--orange)':'var(--green)',
+                        transition:'width 1s ease'}}/>
+                    </div>
+                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,fontWeight:700,
+                      color:d.level==='high'?'var(--red)':d.level==='med'?'var(--orange)':'var(--green)'}}>{d.risk}%</div>
+                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,letterSpacing:1.5,
+                      padding:'2px 7px',border:'1px solid',
+                      borderColor:d.level==='high'?'rgba(255,68,85,.4)':d.level==='med'?'rgba(255,124,56,.4)':'rgba(0,232,122,.3)',
+                      color:d.level==='high'?'var(--red)':d.level==='med'?'var(--orange)':'var(--green)'
+                    }}>{d.level.toUpperCase()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:16}}>
+              <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative'}}>
+                <div style={{position:'absolute',top:0,left:0,right:0,height:2,
+                  background:`linear-gradient(90deg,transparent,${dis.level==='high'?'var(--red)':dis.level==='med'?'var(--orange)':'var(--green)'},transparent)`}}/>
+                <SectionTitle icon="🌿" text="Disease Detail"/>
+                <div style={{fontSize:22,fontWeight:800,color:'#fff',marginBottom:4}}>{dis.name}</div>
+                <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:'var(--muted)',letterSpacing:2,marginBottom:16}}>CROP: {dis.crop?.toUpperCase()}</div>
+                <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:16}}>
+                  <RingChart pct={dis.risk||0} size={80} stroke={7}
+                    color={dis.level==='high'?'#ff4455':dis.level==='med'?'#ff7c38':'#00e87a'} label="RISK"/>
+                  <div style={{flex:1}}>
+                    {[['Detection Window','48–72h before symptoms'],['Monitoring','Soil moisture + temp + leaf wetness'],
+                      ['ML Trigger','Probability > 60% → alert'],['Treatment','Fungicide / biocontrol spray']].map(([k,v])=>(
+                      <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid rgba(20,61,40,.4)'}}>
+                        <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)'}}>{k}</div>
+                        <div style={{fontSize:10,color:'var(--text)',fontWeight:500,textAlign:'right',maxWidth:160}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{padding:'10px 12px',borderLeft:'2px solid var(--green2)',background:'rgba(0,232,122,.04)',fontSize:11,color:'var(--muted)',lineHeight:1.7}}>
+                  IoT sensors monitor environmental parameters continuously. When CNN model detects &gt;60% disease probability, an automated alert is pushed to the farmer app and inserted into the <strong style={{color:'var(--text)'}}>MongoDB alerts collection</strong> via the Node.js API.
+                </div>
+              </div>
+              <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative'}}>
+                <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,var(--green3),transparent)'}}/>
+                <SectionTitle icon="🗄️" text="diseases Collection Schema"/>
+                <pre style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:'var(--muted)',lineHeight:1.8,background:'var(--surface)',padding:12,border:'1px solid var(--border)',overflowX:'auto'}}>
+{`// db.diseases.findOne({ crop: "${dis.crop||'Wheat'}" })
+{
+  _id:   ObjectId("..."),
+  crop:  "${dis.crop||'Wheat'}",
+  name:  "${dis.name||'Leaf Rust'}",
+  risk:  ${dis.risk||88},
+  level: "${dis.level||'high'}",
+  updatedAt: ISODate("2025-03-23T08:41:00Z")
+}`}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════ ALERTS ═══════════ */}
+        {activeSection==='alerts' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,animation:'fadeUp .4s ease both'}}>
+            <div><AlertsPanel alerts={alerts} onTrigger={triggerAlert} expanded/></div>
+            <div style={{display:'flex',flexDirection:'column',gap:16}}>
+              <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative'}}>
+                <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,var(--green3),transparent)'}}/>
+                <SectionTitle icon="🗄️" text="alerts Collection Schema"/>
+                <pre style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:'var(--muted)',lineHeight:1.8,background:'var(--surface)',padding:12,border:'1px solid var(--border)',overflowX:'auto'}}>
+{`// db.alerts.find().sort({createdAt:-1}).limit(10)
+{
+  _id:     ObjectId("..."),
+  time:    "08:41",
+  level:   "crit",
+  msg:     "Zone 3 — Wheat Leaf Rust 88%...",
+  tag:     "CRITICAL",
+  createdAt: ISODate("2025-03-23T08:41:00Z")
+}
+
+const AlertSchema = new mongoose.Schema({
+  time:  String,
+  level: { type: String, enum:['crit','warn','info'] },
+  msg:   String,
+  tag:   String,
+}, { timestamps: true });
+
+// POST /api/alerts  →  MongoDB.insertOne(alert)`}
+                </pre>
+                <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:8}}>
+                  <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)',letterSpacing:2,textTransform:'uppercase',marginBottom:4}}>Trigger Test Alerts</div>
+                  {[
+                    ['⚠️ Moisture Critical','Soil moisture critically low — emergency irrigation required.','crit'],
+                    ['🧪 pH Anomaly','Soil pH spike detected in Zone 4 — check fertilizer ratio.','warn'],
+                    ['🤖 Model Retrained','CNN retrained on 180 new samples · accuracy +0.2%.','info'],
+                  ].map(([label,msg,level])=>(
+                    <button key={label} onClick={()=>triggerAlert(msg,level)} style={{
+                      padding:'9px 14px',background:'rgba(0,232,122,.05)',
+                      border:`1px solid ${level==='crit'?'rgba(255,68,85,.3)':level==='warn'?'rgba(255,124,56,.3)':'rgba(0,232,122,.2)'}`,
+                      color:level==='crit'?'var(--red)':level==='warn'?'var(--orange)':'var(--green)',
+                      fontFamily:"'JetBrains Mono',monospace",fontSize:9,letterSpacing:1,cursor:'pointer',textAlign:'left',transition:'all .2s'
+                    }}
+                      onMouseEnter={e=>e.currentTarget.style.background='rgba(0,232,122,.1)'}
+                      onMouseLeave={e=>e.currentTarget.style.background='rgba(0,232,122,.05)'}
+                    >→ INSERT: {label}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TICKER ── */}
+        <div style={{marginTop:16,background:'rgba(7,20,16,.95)',border:'1px solid var(--border)',
+          height:28,overflow:'hidden',display:'flex',alignItems:'center',gap:0}}>
+          <div style={{flexShrink:0,padding:'0 12px',fontFamily:"'JetBrains Mono',monospace",fontSize:9,
+            color:'var(--green)',letterSpacing:3,borderRight:'1px solid var(--border)',height:'100%',
+            display:'flex',alignItems:'center'}}>SYS</div>
+          <div style={{flex:1,overflow:'hidden',position:'relative',height:'100%',display:'flex',alignItems:'center'}}>
+            <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--dim)',
+              whiteSpace:'nowrap',animation:'ticker 30s linear infinite',letterSpacing:1.5,display:'flex',gap:0}}>
+              <span>CROPBOT SMART FARM ACTIVE · CNN ACCURACY 99% · 6 IOT NODES ONLINE · MONGODB CONNECTED · REACT 18 · MOISTURE ALERT ZONE 3 · ML MODEL MKGPCNN SERVING · WATER SAVED 60% · EARLY DETECTION 72H ·&nbsp;</span>
+              <span>CROPBOT SMART FARM ACTIVE · CNN ACCURACY 99% · 6 IOT NODES ONLINE · MONGODB CONNECTED · REACT 18 · MOISTURE ALERT ZONE 3 · ML MODEL MKGPCNN SERVING · WATER SAVED 60% · EARLY DETECTION 72H ·&nbsp;</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   SUB-COMPONENTS
+═══════════════════════════════════════════════════ */
+function SectionTitle({ icon, text }) {
+  return (
+    <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,letterSpacing:3,color:'var(--muted)',
+      textTransform:'uppercase',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+      <span style={{color:'var(--green)'}}>{icon}</span>
+      {text}
+      <div style={{flex:1,height:1,background:'linear-gradient(90deg,var(--border),transparent)'}}/>
+    </div>
+  );
+}
+
+function Pipeline() {
+  const steps = [
+    {icon:'📡',label:'IoT\nSensors',active:true},
+    {icon:'🔗',label:'Edge\nComputing',active:true},
+    {icon:'☁️',label:'Cloud\nPlatform',active:true},
+    {icon:'🧠',label:'ML\nInference',active:true},
+    {icon:'⚠️',label:'Disease\nAlert',active:true},
+    {icon:'💊',label:'Treatment\nRec.',active:false},
+    {icon:'📱',label:'Farmer\nApp',active:false},
+  ];
+  return (
+    <div style={{display:'flex',alignItems:'center',overflowX:'auto',paddingBottom:4}}>
+      {steps.map((s,i)=>(
+        <React.Fragment key={i}>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,minWidth:80,flex:1}}>
+            <div style={{width:44,height:44,border:`1px solid ${s.active?'var(--green)':'var(--border2)'}`,
+              background: s.active?'rgba(0,232,122,.08)':'var(--surface)',
+              display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,
+              boxShadow: s.active?'0 0 18px rgba(0,232,122,.15)':'none'}}>
+              {s.icon}
+            </div>
+            <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:s.active?'var(--muted)':'var(--dim)',
+              letterSpacing:1,textAlign:'center',textTransform:'uppercase',whiteSpace:'pre-line'}}>{s.label}</div>
+          </div>
+          {i<steps.length-1 && (
+            <div style={{flex:1,height:1,background:'linear-gradient(90deg,var(--green3),var(--dim))',
+              minWidth:16,position:'relative',top:-18,fontSize:8,color:'var(--dim)'}}>
+              <span style={{position:'absolute',right:-5,top:-5}}>▶</span>
+            </div>
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function Architecture() {
+  const layers = [
+    { lbl:'SENSOR', color:'var(--sky)', bc:'rgba(0,180,216,.4)', bg:'rgba(0,180,216,.05)',
+      blocks:[{t:'Soil Sensors',s:'Moisture · pH · NPK'},{t:'Weather Station',s:'Temp · Humidity · Wind'},{t:'Camera/UAV',s:'Leaf imagery'},{t:'GPS Module',s:'Geo-tagging'}] },
+    { lbl:'EDGE',   color:'var(--teal)',bc:'rgba(0,212,170,.4)', bg:'rgba(0,212,170,.05)',
+      blocks:[{t:'Raspberry Pi 5',s:'Tiny-LiteNet'},{t:'Arduino/MCU',s:'Aggregation'},{t:'Fog Node',s:'Preprocessing'}] },
+    { lbl:'CLOUD',  color:'var(--purple)',bc:'rgba(167,139,250,.4)',bg:'rgba(167,139,250,.05)',
+      blocks:[{t:'IoT Platform',s:'AWS IoT/Azure'},{t:'ML Pipeline',s:'Train · Serve'},{t:'MongoDB Atlas',s:'InfluxDB'}] },
+    { lbl:'APP',    color:'var(--green)', bc:'rgba(0,232,122,.4)',bg:'rgba(0,232,122,.05)',
+      blocks:[{t:'Disease Alert',s:'Push notification'},{t:'Farmer App',s:'Web · Mobile'},{t:'Agronomist',s:'Treatment API'}] },
+  ];
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+      {layers.map((layer,i)=>(
+        <div key={i}>
+          <div style={{display:'flex',gap:6,alignItems:'stretch'}}>
+            <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--muted)',letterSpacing:2,
+              textTransform:'uppercase',writingMode:'vertical-rl',transform:'rotate(180deg)',
+              padding:'4px 0',borderRight:'1px solid var(--border)',marginRight:6,flexShrink:0,width:20,textAlign:'center'}}>
+              {layer.lbl}
+            </div>
+            <div style={{display:'flex',gap:6,flex:1,flexWrap:'wrap'}}>
+              {layer.blocks.map((b,j)=>(
+                <div key={j} style={{flex:1,minWidth:80,padding:'9px 8px',border:`1px solid ${layer.bc}`,
+                  background:layer.bg,textAlign:'center',fontSize:10,fontWeight:600,color:layer.color,
+                  transition:'transform .2s',cursor:'default'}}
+                  onMouseEnter={e=>e.currentTarget.style.transform='translateY(-2px)'}
+                  onMouseLeave={e=>e.currentTarget.style.transform='none'}>
+                  {b.t}
+                  <span style={{display:'block',fontFamily:"'JetBrains Mono',monospace",fontSize:7,color:'var(--muted)',marginTop:3,letterSpacing:1}}>{b.s}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {i<layers.length-1 && <div style={{display:'flex',alignItems:'center',justifyContent:'center',color:'var(--dim)',fontSize:10,padding:'2px 0'}}>↓</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SensorCard({ sensor: s }) {
+  const max = Math.max(...s.history, 1);
+  const pct = Math.round((s.val / max) * 100);
+  return (
+    <div style={{background:'var(--card)',border:`1px solid ${s.status==='warn'?'rgba(255,124,56,.4)':'var(--border)'}`,
+      padding:16,position:'relative',animation:'fadeUp .5s ease both'}}>
+      <div style={{position:'absolute',top:0,left:0,right:0,height:1,
+        background:`linear-gradient(90deg,transparent,${s.status==='warn'?'var(--orange)':'var(--green3)'},transparent)`}}/>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+        <div style={{fontSize:20}}>{s.icon}</div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--muted)',letterSpacing:1,textTransform:'uppercase'}}>{s.status==='warn'?'⚠ WARN':'● ONLINE'}</div>
+          <div style={{width:7,height:7,borderRadius:'50%',
+            background:s.status==='warn'?'var(--orange)':'var(--green)',
+            boxShadow:`0 0 8px ${s.status==='warn'?'var(--orange)':'var(--green)'}`,
+            animation:'pulse 2s ease-in-out infinite'}}/>
+        </div>
+      </div>
+      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'var(--muted)',letterSpacing:2,textTransform:'uppercase',marginBottom:6}}>{s.name}</div>
+      <div style={{fontWeight:800,fontSize:32,color:s.status==='warn'?'var(--orange)':'var(--teal)',lineHeight:1,letterSpacing:-1,marginBottom:8}}>
+        {s.val}<span style={{fontSize:13,fontWeight:400,color:'var(--muted)',marginLeft:4}}>{s.unit}</span>
+      </div>
+      <div style={{height:8,background:'rgba(20,61,40,.5)',marginBottom:8,borderRadius:2,overflow:'hidden'}}>
+        <div style={{height:'100%',width:`${pct}%`,background:s.status==='warn'?'var(--orange)':'var(--green)',transition:'width .8s ease'}}/>
+      </div>
+      <Sparkline history={s.history} color={s.status==='warn'?'rgba(255,124,56,.3)':'var(--green3)'} activeColor={s.status==='warn'?'var(--orange)':'var(--green)'}/>
+      <div style={{marginTop:8,fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--dim)',letterSpacing:1}}>
+        MongoDB · sensors.{s._id} · live
+      </div>
+    </div>
+  );
+}
+
+function AlertsPanel({ alerts, onTrigger, expanded=false }) {
+  const colors = { crit:{border:'rgba(255,68,85,.3)',bg:'rgba(255,68,85,.04)',tag:'var(--red)',left:'var(--red)'},
+                   warn:{border:'rgba(255,124,56,.3)',bg:'rgba(255,124,56,.04)',tag:'var(--orange)',left:'var(--orange)'},
+                   info:{border:'var(--border)',bg:'transparent',tag:'var(--muted)',left:'var(--dim)'} };
+  return (
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',padding:20,position:'relative',flex:1}}>
+      <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:'linear-gradient(90deg,transparent,var(--green3),transparent)'}}/>
+      <SectionTitle icon="🔔" text="Alerts · MongoDB Collection"/>
+      <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:expanded?14:0}}>
+        {alerts.slice(0, expanded?10:5).map(a=>{
+          const c = colors[a.level]||colors.info;
+          return (
+            <div key={a._id} style={{padding:'8px 10px',borderLeft:`2px solid ${c.left}`,
+              border:`1px solid ${c.border}`,background:c.bg}}>
+              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'var(--dim)',marginBottom:3}}>{a.time} · TODAY</div>
+              <div style={{fontSize:11,color:'var(--muted)',lineHeight:1.5,marginBottom:4}}>{a.msg}</div>
+              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:c.tag}}>● {a.tag}</div>
+            </div>
+          );
+        })}
+      </div>
+      {!expanded && (
+        <button onClick={()=>onTrigger('Manual test: IoT anomaly detected in Zone 5.','warn')}
+          style={{marginTop:10,width:'100%',padding:'9px',background:'rgba(0,232,122,.05)',
+            border:'1px solid rgba(0,232,122,.2)',color:'var(--green)',fontFamily:"'JetBrains Mono',monospace",
+            fontSize:9,letterSpacing:2,cursor:'pointer',transition:'all .2s'}}
+          onMouseEnter={e=>e.currentTarget.style.background='rgba(0,232,122,.1)'}
+          onMouseLeave={e=>e.currentTarget.style.background='rgba(0,232,122,.05)'}>
+          + INSERT ALERT → MONGODB
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MongoDBPanel() {
+  return (
+    <div style={{background:'var(--card)',border:'1px solid rgba(0,232,122,.15)',padding:20,position:'relative'}}>
+      <div style={{position:'absolute',top:0,left:0,right:0,height:2,
+        background:'linear-gradient(90deg,transparent,#6db33f,transparent)'}}/>
+      <SectionTitle icon="🍃" text="MongoDB Stack"/>
+      {[
+        ['React 18',        'UI layer · useState/useEffect hooks · component-driven rendering'],
+        ['MongoDB Atlas',   'Cloud NoSQL · sensors, diseases, models, alerts collections'],
+        ['Mongoose ODM',    'Schema validation · findOne · insertOne · updateOne'],
+        ['Express API',     'REST endpoints · GET /api/sensors · POST /api/alerts'],
+        ['Node.js',         'Backend runtime · async/await · change streams'],
+        ['Edge Inference',  'Raspberry Pi 5 · Tiny-LiteNet · offline disease detection'],
+      ].map(([k,v])=>(
+        <div key={k} style={{display:'grid',gridTemplateColumns:'110px 1fr',gap:10,padding:'7px 0',borderBottom:'1px solid rgba(20,61,40,.4)'}}>
+          <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:'#6db33f',letterSpacing:1,textTransform:'uppercase'}}>{k}</div>
+          <div style={{fontSize:10,color:'var(--muted)',lineHeight:1.5}}>{v}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
